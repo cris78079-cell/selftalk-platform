@@ -172,6 +172,8 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 @media print{body *{visibility:hidden}.cert,.cert *{visibility:visible}.cert{position:absolute;left:0;top:0;width:100%}}
 @media(max-width:1100px){.days-grid{grid-template-columns:repeat(5,1fr)}}
 @media(max-width:900px){.hero{grid-template-columns:1fr}.days-grid{grid-template-columns:repeat(2,1fr)}.challenge-layout{grid-template-columns:1fr}.folder-grid{grid-template-columns:repeat(2,1fr)}.navbar{border-radius:22px}.nav-actions{display:none}.profile-grid{grid-template-columns:1fr}.cert-line{grid-template-columns:1fr}}
+
+.recording-selected{border:2px solid #22c55e!important;background:#f0fdf4!important}.selected-folder{border-color:#22c55e!important;background:#f0fdf4!important}.recording-item video{display:block}.item-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
 @media(max-width:520px){.page{padding:12px}.brand span{display:none}.days-grid,.folder-grid{grid-template-columns:1fr}.card,.storage-card,.profile-card{padding:16px}.modal{padding:14px;border-radius:22px}.recording-actions .btn{width:100%}}
 
 
@@ -1327,7 +1329,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
           <button class="btn green" id="saveBtn" onclick="saveRecording()" disabled>Save</button>
         </div>
         <div class="status-line"><span id="recordingStatus">Camera ready</span><span class="timer">⏱️ <span id="timer">00:00</span></span></div>
-        <p id="saveHint">Your video must be at least 2:00 minutes to save and complete the day.</p>
+        <p id="saveHint">Your video must meet the minimum duration. Saving creates a draft; the day is completed only after you select one attempt for submission.</p>
       </div>
     </div>
   </div>
@@ -1336,7 +1338,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 <div class="modal-backdrop" id="storageModal">
   <div class="modal">
     <div class="modal-head">
-      <div><h2>Recording Storage Folder</h2><p>Videos are organized by day. Delete a video if you want to repeat and improve your daily response.</p></div>
+      <div><h2>My Recording Attempts</h2><p>Open a day, review every attempt, select one for submission, and delete the others when you no longer need them.</p></div>
       <button class="close-btn" onclick="closeModal('storageModal')">×</button>
     </div>
     <div class="folder-grid" id="folderGrid"></div>
@@ -1458,6 +1460,8 @@ const topicsByLevel = {
 let topics = topicsByLevel[level] || topicsByLevel.Beginner;
 
 let currentDay=1, stream=null, mediaRecorder=null, chunks=[], lastBlob=null;
+let cloudRecordings = [];
+const RECORDINGS_BUCKET = "student-recordings";
 let timerInterval=null, elapsedSeconds=0, timerStart=0, finalDuration=0;
 
 function loadProfile(){
@@ -1571,9 +1575,28 @@ async function saveProfile(){
  alert("Participant information saved.");
 }
 function getProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")}catch(e){return{}}}
-function getRecordings(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch(e){return[]}}
-function setRecordings(arr){localStorage.setItem(STORAGE_KEY,JSON.stringify(arr))}
-function getCompletedDays(){return [...new Set(getRecordings().filter(r=>r.duration>=MIN_SECONDS).map(r=>r.day))].sort((a,b)=>a-b)}
+function getRecordings(){ return cloudRecordings; }
+function setRecordings(arr){ cloudRecordings = Array.isArray(arr) ? arr : []; }
+function getCompletedDays(){
+ return [...new Set(getRecordings().filter(r => (r.status === "selected" || r.is_valid === true) && Number(r.duration||r.duration_seconds||0) >= MIN_SECONDS).map(r=>Number(r.day||r.day_number)))].sort((a,b)=>a-b)
+}
+async function loadCloudRecordings(){
+ const client=initSupabase();
+ if(!client || !selfTalkUser){ setRecordings([]); return; }
+ let query=client.from("recordings").select("*").eq("student_id",selfTalkUser.id).order("created_at",{ascending:true});
+ if(activeStudentClass && activeStudentClass.id) query=query.eq("class_id",activeStudentClass.id);
+ else query=query.is("class_id",null);
+ const {data,error}=await query;
+ if(error){ console.error("Could not load recordings",error); alert("The recordings could not be loaded: "+error.message); return; }
+ setRecordings((data||[]).map(r=>({
+   ...r,
+   day:Number(r.day_number),
+   duration:Number(r.duration_seconds||0),
+   createdAt:r.created_at || r.submitted_at || new Date().toISOString(),
+   title:(topics.find(t=>t.day===Number(r.day_number))||{}).title || `Day ${r.day_number}`
+ })));
+ renderDays();
+}
 function ymd(d){const x=new Date(d);x.setHours(0,0,0,0);return x}
 function dateKey(d){const x=ymd(d);return String(x.getTime())}
 function challengeStartDate(){const raw=localStorage.getItem(START_KEY);return raw?new Date(parseInt(raw)):null}
@@ -1691,23 +1714,60 @@ function saveRecording(){
   mediaRecorder.stop();setTimeout(finalizeSave,250);
  }
 }
-function finalizeSave(){
+async function finalizeSave(){
  if(finalDuration<MIN_SECONDS){alert("Your video must be at least "+minimumMinutesLabel()+". Current duration: "+formatTime(finalDuration)+".");return}
+ if(!lastBlob){alert("No recording file is available.");return}
+ if(!selfTalkUser){alert("Log in with Google before saving a recording.");return}
+ const client=initSupabase(); if(!client)return;
  ensureChallengeStart();
- const recordings=getRecordings();
- const existing=recordings.find(r=>r.day===currentDay);
- if(existing){const replace=confirm("This day already has a saved video. Do you want to replace it?");if(!replace)return}
- const filtered=recordings.filter(r=>r.day!==currentDay);
- filtered.push({id:Date.now(),day:currentDay,level,title:topics.find(t=>t.day===currentDay).title,duration:finalDuration,createdAt:new Date().toISOString(),supabasePath:`students/{student_id}/level/${level.toLowerCase()}/day-${currentDay}/video-${Date.now()}.webm`});
- setRecordings(filtered);
- alert("Recording saved for Day "+currentDay+".");
- lastBlob=null;saveBtn.disabled=true;renderDays();renderStorage(currentDay);
+ const recordingId=(crypto && crypto.randomUUID)?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`;
+ const classId=activeStudentClass?.id || null;
+ const topic=topics.find(t=>t.day===currentDay);
+ const activityId=topic?.activityId || null;
+ const existingAttempts=getRecordings().filter(r=>Number(r.day||r.day_number)===currentDay);
+ const attemptNumber=existingAttempts.length+1;
+ const storagePath=`${selfTalkUser.id}/${classId||"independent"}/day-${currentDay}/${recordingId}.webm`;
+ saveBtn.disabled=true;
+ document.getElementById("recordingStatus").textContent="Uploading recording...";
+ const {error:uploadError}=await client.storage.from(RECORDINGS_BUCKET).upload(storagePath,lastBlob,{contentType:"video/webm",upsert:false});
+ if(uploadError){console.error(uploadError);alert("The video could not be uploaded: "+uploadError.message);saveBtn.disabled=false;return}
+ const payload={
+   id:recordingId, student_id:selfTalkUser.id, class_id:classId, activity_id:activityId,
+   day_number:currentDay, storage_path:storagePath, video_url:null,
+   duration_seconds:finalDuration, is_valid:false, status:"draft",
+   attempt_number:attemptNumber, submitted_at:null
+ };
+ const {data,error}=await client.from("recordings").insert(payload).select().single();
+ if(error){
+   await client.storage.from(RECORDINGS_BUCKET).remove([storagePath]);
+   console.error(error);alert("The recording data could not be saved: "+error.message);saveBtn.disabled=false;return;
+ }
+ cloudRecordings.push({...data,day:currentDay,duration:finalDuration,createdAt:data.created_at||new Date().toISOString(),title:topic?.title||`Day ${currentDay}`});
+ alert(`Attempt ${attemptNumber} saved for Day ${currentDay}. Open My Recordings to select the version you want to submit.`);
+ lastBlob=null;saveBtn.disabled=true;document.getElementById("recordingStatus").textContent="Recording uploaded.";renderDays();await renderStorage(currentDay);
 }
-function deleteRecording(id){
- const ok=confirm("Delete this recording? The day will no longer count as completed if no video remains in its folder.");
- if(!ok)return;
- setRecordings(getRecordings().filter(r=>r.id!==id));
- renderDays();renderStorage();
+async function selectRecording(id){
+ const item=getRecordings().find(r=>String(r.id)===String(id)); if(!item)return;
+ if(Number(item.duration||item.duration_seconds||0)<MIN_SECONDS){alert("This recording does not meet the minimum duration.");return}
+ const client=initSupabase(); if(!client)return;
+ const classId=activeStudentClass?.id || null; const day=Number(item.day||item.day_number);
+ let reset=client.from("recordings").update({is_valid:false,status:"draft",submitted_at:null}).eq("student_id",selfTalkUser.id).eq("day_number",day);
+ reset=classId?reset.eq("class_id",classId):reset.is("class_id",null);
+ const {error:resetError}=await reset; if(resetError){alert("The previous selection could not be cleared: "+resetError.message);return}
+ const {error}=await client.from("recordings").update({is_valid:true,status:"selected",submitted_at:new Date().toISOString()}).eq("id",id).eq("student_id",selfTalkUser.id);
+ if(error){alert("The recording could not be selected: "+error.message);await loadCloudRecordings();return}
+ getRecordings().forEach(r=>{if(Number(r.day||r.day_number)===day){r.is_valid=String(r.id)===String(id);r.status=r.is_valid?"selected":"draft"}});
+ renderDays();await renderStorage(day);alert(`Day ${day} completed. This recording is now your submission.`);
+}
+async function deleteRecording(id){
+ const item=getRecordings().find(r=>String(r.id)===String(id)); if(!item)return;
+ const ok=confirm("Delete this recording permanently? This action cannot be undone."); if(!ok)return;
+ const client=initSupabase(); if(!client)return;
+ const {error:storageError}=await client.storage.from(RECORDINGS_BUCKET).remove([item.storage_path]);
+ if(storageError){console.error(storageError);alert("The video file could not be deleted: "+storageError.message);return}
+ const {error}=await client.from("recordings").delete().eq("id",id).eq("student_id",selfTalkUser.id);
+ if(error){alert("The recording record could not be deleted: "+error.message);return}
+ setRecordings(getRecordings().filter(r=>String(r.id)!==String(id)));renderDays();await renderStorage(Number(item.day||item.day_number));
 }
 function resetChallenge(){
  const ok=confirm("Reset Challenge? This will delete saved videos, unlock Day 1 again, and restart the challenge dates.");
@@ -1733,14 +1793,27 @@ function updateMinimumDurationText(){
  const saveHint = document.getElementById("saveHint");
  if(saveHint) saveHint.textContent = "Your video must be at least " + minText + " to save and complete the day.";
 }
-function openStorageModal(){renderStorage();openModal("storageModal")}
-function renderStorage(selectedDay=null){
+async function openStorageModal(){openModal("storageModal");await loadCloudRecordings();await renderStorage();}
+async function renderStorage(selectedDay=null){
  const folderGrid=document.getElementById("folderGrid"),list=document.getElementById("recordingsList"),recordings=getRecordings();
  folderGrid.innerHTML="";list.innerHTML="";
- for(let i=1;i<=10;i++){const recs=recordings.filter(r=>r.day===i);const f=document.createElement("div");f.className="folder";f.onclick=()=>renderStorage(i);f.innerHTML=`<div class="folder-icon">📁</div><strong>Day ${i}</strong><span>${recs.length} video(s)</span>`;folderGrid.appendChild(f)}
- const filtered=selectedDay?recordings.filter(r=>r.day===selectedDay):recordings;
- if(filtered.length===0){list.innerHTML=`<div class="recording-item"><h3>No recordings yet</h3><p>Select a day, record your response and save it.</p></div>`;return}
- filtered.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).forEach(item=>{const div=document.createElement("div");div.className="recording-item";div.innerHTML=`<h3>${item.title}</h3><p>Saved: ${new Date(item.createdAt).toLocaleString()} • Duration: ${formatTime(item.duration||0)}</p><p><strong>Future Supabase path:</strong> ${item.supabasePath}</p><div class="item-actions"><button class="btn danger" onclick="deleteRecording(${item.id})">Delete video</button></div>`;list.appendChild(div)})
+ for(let i=1;i<=TOTAL_COURSE_DAYS;i++){
+   const recs=recordings.filter(r=>Number(r.day||r.day_number)===i), selected=recs.some(r=>r.status==="selected"||r.is_valid===true);
+   const f=document.createElement("div");f.className="folder"+(selected?" selected-folder":"");f.onclick=()=>renderStorage(i);
+   f.innerHTML=`<div class="folder-icon">📁</div><strong>Day ${i}${selected?" ✓":""}</strong><span>${recs.length} attempt(s)</span>`;folderGrid.appendChild(f)
+ }
+ const filtered=(selectedDay?recordings.filter(r=>Number(r.day||r.day_number)===selectedDay):recordings).sort((a,b)=>new Date(b.createdAt||b.created_at)-new Date(a.createdAt||a.created_at));
+ if(filtered.length===0){list.innerHTML=`<div class="recording-item"><h3>No recordings yet</h3><p>Record one or more attempts, then return here to select the version you want to submit.</p></div>`;return}
+ const client=initSupabase();
+ for(const item of filtered){
+   const selected=item.status==="selected"||item.is_valid===true;
+   const {data:signed,error:signedError}=await client.storage.from(RECORDINGS_BUCKET).createSignedUrl(item.storage_path,3600);
+   const url=signed?.signedUrl||"";
+   const attempt=item.attempt_number||filtered.filter(x=>Number(x.day||x.day_number)===Number(item.day||item.day_number)).indexOf(item)+1;
+   const div=document.createElement("div");div.className="recording-item"+(selected?" recording-selected":"");
+   div.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><h3>Day ${item.day||item.day_number} · Attempt ${attempt}</h3><p>${new Date(item.createdAt||item.created_at||Date.now()).toLocaleString()} • Duration: ${formatTime(Number(item.duration||item.duration_seconds||0))}</p></div><span style="font-weight:800;color:${selected?'#15803d':'#64748b'}">${selected?'SELECTED ✓':'DRAFT'}</span></div>${url?`<video controls preload="metadata" style="width:100%;max-height:360px;border-radius:14px;background:#0f172a;margin:10px 0" src="${url}"></video>`:`<p>Preview unavailable${signedError?`: ${signedError.message}`:''}</p>`}<div class="item-actions"><button class="btn green" ${selected?'disabled':''} onclick="selectRecording('${item.id}')">${selected?'Selected for submission':'Select for submission'}</button><button class="btn danger" onclick="deleteRecording('${item.id}')">Delete attempt</button></div>`;
+   list.appendChild(div)
+ }
 }
 function getCertificateProviderName(){
  // Independent Practice uses SelfTalk as the default instructor.
@@ -2841,6 +2914,7 @@ async function loadJoinedClassExperience(){
     icon: palette[index % palette.length],
     accent: accents[index % accents.length],
     title: `Day ${row.day_number}: ${row.topic || `Activity ${row.day_number}`}`,
+    activityId: row.id,
     questions: Array.isArray(row.questions) ? row.questions : []
   }));
 
@@ -2863,6 +2937,7 @@ async function loadJoinedClassExperience(){
   const certText = document.querySelector('#certModal .modal-head p');
   if(certText) certText.textContent = `Certificate unlocked after completing all ${TOTAL_COURSE_DAYS} days.`;
 
+  await loadCloudRecordings();
   renderDays();
 }
 
@@ -2937,4 +3012,5 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
+
 
