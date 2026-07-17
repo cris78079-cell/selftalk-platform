@@ -1484,6 +1484,8 @@ function checkProfileOnLoad(){
         setTimeout(()=>openProfileModal(), 500);
     }
 }
+let pendingJoinClassCode = null;
+
 async function saveProfile(){
 
  const name = document.getElementById("studentName").value.trim();
@@ -1546,9 +1548,20 @@ async function saveProfile(){
  }
 
  closeModal("profileModal");
- alert("Participant information saved.");
  loadProfile();
  if(typeof renderProgress === "function") renderProgress();
+
+ // If the profile form was opened from Join a Class, continue automatically.
+ if(pendingJoinClassCode){
+   const codeToJoin = pendingJoinClassCode;
+   pendingJoinClassCode = null;
+   const codeInput = document.getElementById("classCodeInput");
+   if(codeInput) codeInput.value = codeToJoin;
+   await joinClassFromHome(true);
+   return;
+ }
+
+ alert("Participant information saved.");
 }
 function getProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")}catch(e){return{}}}
 function getRecordings(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]")}catch(e){return[]}}
@@ -1778,7 +1791,7 @@ function startIndependentFromHome(){
   url.searchParams.set("level", homeSelectedLevel);
   window.location.href = url.toString();
 }
-async function joinClassFromHome(){
+async function joinClassFromHome(profileAlreadyConfirmed = false){
   const codeInput = document.getElementById("classCodeInput");
   const code = codeInput.value.trim().toUpperCase();
   if(!code){ alert("Please enter a class code."); return; }
@@ -1795,6 +1808,27 @@ async function joinClassFromHome(){
   if(joinButton){ joinButton.disabled = true; joinButton.textContent = "Joining..."; }
 
   try{
+    // The enrollment foreign key requires a matching profiles row. Use the
+    // same profile form and save routine that already works in Independent Practice.
+    if(!profileAlreadyConfirmed){
+      const { data: existingProfile, error: profileCheckError } = await client
+        .from("profiles")
+        .select("id, full_name, country")
+        .eq("id", selfTalkUser.id)
+        .maybeSingle();
+
+      if(profileCheckError) throw profileCheckError;
+
+      if(!existingProfile){
+        pendingJoinClassCode = code;
+        if(joinButton){ joinButton.disabled = false; joinButton.textContent = originalText; }
+        closeModal("studentChoicesModal");
+        openProfileModal();
+        alert("Complete your participant information once. After saving, SelfTalk will join the class automatically.");
+        return;
+      }
+    }
+
     const { data: classRow, error: classError } = await client
       .from("classes")
       .select("id, class_name, class_code, level, course_days, minimum_duration_seconds, minimum_duration, start_date, end_date, certificate_instructor, certificate_institution, institution_name")
@@ -1806,31 +1840,6 @@ async function joinClassFromHome(){
       alert("No class was found with that code. Check the code and try again.");
       return;
     }
-
-    // class_students.student_id references profiles.id. Ensure the signed-in
-    // user has a profile row before creating the enrollment.
-    let savedProfile = {};
-    try{
-      savedProfile = JSON.parse(localStorage.getItem("selftalk_profile_v4") || "{}");
-    }catch(_error){
-      savedProfile = {};
-    }
-
-    const metadata = selfTalkUser.user_metadata || {};
-    const fallbackName = metadata.full_name || metadata.name || selfTalkUser.email || "SelfTalk Student";
-
-    const { error: profileUpsertError } = await client
-      .from("profiles")
-      .upsert({
-        id: selfTalkUser.id,
-        full_name: savedProfile.name || fallbackName,
-        email: selfTalkUser.email || savedProfile.email || "",
-        role: "student",
-        institution_name: savedProfile.institution || "",
-        country: savedProfile.country || ""
-      }, { onConflict: "id" });
-
-    if(profileUpsertError) throw profileUpsertError;
 
     const { data: existingEnrollment, error: enrollmentLookupError } = await client
       .from("class_students")
