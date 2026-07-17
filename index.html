@@ -1807,6 +1807,31 @@ async function joinClassFromHome(){
       return;
     }
 
+    // class_students.student_id references profiles.id. Ensure the signed-in
+    // user has a profile row before creating the enrollment.
+    let savedProfile = {};
+    try{
+      savedProfile = JSON.parse(localStorage.getItem("selftalk_profile_v4") || "{}");
+    }catch(_error){
+      savedProfile = {};
+    }
+
+    const metadata = selfTalkUser.user_metadata || {};
+    const fallbackName = metadata.full_name || metadata.name || selfTalkUser.email || "SelfTalk Student";
+
+    const { error: profileUpsertError } = await client
+      .from("profiles")
+      .upsert({
+        id: selfTalkUser.id,
+        full_name: savedProfile.name || fallbackName,
+        email: selfTalkUser.email || savedProfile.email || "",
+        role: "student",
+        institution_name: savedProfile.institution || "",
+        country: savedProfile.country || ""
+      }, { onConflict: "id" });
+
+    if(profileUpsertError) throw profileUpsertError;
+
     const { data: existingEnrollment, error: enrollmentLookupError } = await client
       .from("class_students")
       .select("id")
