@@ -1475,6 +1475,13 @@ function loadProfile(){
 }
 function openProfileModal(){
  loadProfile();
+ const profileModal = document.getElementById("profileModal");
+ // The profile modal is originally inside the student module. On the home
+ // screen that module is hidden, so move the modal directly under <body>
+ // before opening it. This keeps it visible when Join a Class requests a profile.
+ if(profileModal && profileModal.parentElement !== document.body){
+   document.body.appendChild(profileModal);
+ }
  openModal("profileModal");
 }
 function checkProfileOnLoad(){
