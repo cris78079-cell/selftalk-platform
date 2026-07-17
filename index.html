@@ -2958,6 +2958,7 @@ async function loadRealTeacherStudents(){
 
   if(error){
     console.error("Unable to load enrolled students:", error);
+    alert("Could not load enrolled students: " + error.message);
     return;
   }
 
@@ -2969,17 +2970,72 @@ async function loadRealTeacherStudents(){
       .select("id, full_name, email, country, institution_name")
       .in("id", studentIds);
     if(profileError){
-      console.warn("Student profiles could not be loaded. Check the teacher profile SELECT policy.", profileError);
+      console.warn("Student profiles could not be loaded.", profileError);
     }else{
       profilesById = new Map((profiles || []).map(p => [String(p.id), p]));
     }
   }
+
+  // The teacher sees only the attempt selected by each student for submission.
+  let recordings = [];
+  if(studentIds.length){
+    const { data: recordingRows, error: recordingError } = await client
+      .from("recordings")
+      .select("id, class_id, activity_id, student_id, day_number, storage_path, duration_seconds, status, is_valid, submitted_at, created_at")
+      .in("class_id", classIds)
+      .in("student_id", studentIds)
+      .or("status.eq.selected,is_valid.eq.true")
+      .order("day_number", { ascending: true });
+
+    if(recordingError){
+      console.error("Unable to load submitted recordings:", recordingError);
+      alert("Students were loaded, but submitted videos could not be loaded: " + recordingError.message);
+    }else{
+      recordings = recordingRows || [];
+    }
+  }
+
+  // Create temporary private URLs so the teacher can play the videos.
+  const recordingsWithUrls = await Promise.all(recordings.map(async row => {
+    let signedUrl = "";
+    if(row.storage_path){
+      const { data: signedData, error: signedError } = await client.storage
+        .from(RECORDINGS_BUCKET)
+        .createSignedUrl(row.storage_path, 3600);
+      if(signedError){
+        console.warn("Could not create signed video URL:", row.storage_path, signedError);
+      }else{
+        signedUrl = signedData?.signedUrl || "";
+      }
+    }
+    return {
+      id: row.id,
+      classId: row.class_id,
+      studentId: row.student_id,
+      activityId: row.activity_id,
+      day: Number(row.day_number),
+      duration: Number(row.duration_seconds || 0),
+      createdAt: row.submitted_at || row.created_at,
+      storagePath: row.storage_path,
+      status: row.status || (row.is_valid ? "selected" : "draft"),
+      videoUrl: signedUrl
+    };
+  }));
 
   classes.forEach(cls => {
     cls.students = (enrollments || [])
       .filter(e => String(e.class_id) === String(cls.id))
       .map(e => {
         const p = profilesById.get(String(e.student_id)) || {};
+        const studentRecordings = recordingsWithUrls
+          .filter(r => String(r.classId) === String(cls.id) && String(r.studentId) === String(e.student_id))
+          .map(r => {
+            const activity = (cls.activities || []).find(a => Number(a.day) === Number(r.day));
+            return {
+              ...r,
+              title: activity?.title || `Day ${r.day}`
+            };
+          });
         return {
           id: e.student_id,
           name: p.full_name || "Enrolled student",
@@ -2987,16 +3043,22 @@ async function loadRealTeacherStudents(){
           country: p.country || "",
           institution: p.institution_name || "",
           joinedAt: e.joined_at,
-          recordings: []
+          recordings: studentRecordings
         };
       });
   });
 
   teacherClassesCache = classes;
   renderTeacherDashboard();
-  if(typeof renderTeacherStudents === "function") renderTeacherStudents();
-}
+  renderTeacherStudentClasses();
 
+  // Refresh the currently open teacher view, if applicable.
+  if(activeStudentClassId && activeTeacherStudentId){
+    openTeacherStudentProfile(activeStudentClassId, activeTeacherStudentId);
+  }else if(activeStudentClassId){
+    openTeacherClassStudents(activeStudentClassId);
+  }
+}
 window.addEventListener("DOMContentLoaded", async function(){
   await new Promise(resolve => setTimeout(resolve, 300));
   await loadJoinedClassExperience();
@@ -3012,5 +3074,6 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
+
 
 
