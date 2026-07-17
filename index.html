@@ -1977,7 +1977,7 @@ function mapSupabaseClass(row){
     endDate: row.end_date || "",
     classCode: row.class_code,
     students: [],
-    activities: getDefaultActivitiesForLevel(row.level || "Beginner", courseDays),
+    activities: [],
     createdAt: row.created_at || new Date().toISOString(),
     instructorName: row.certificate_instructor || "",
     institutionName: row.certificate_institution || row.institution_name || "",
@@ -2007,6 +2007,41 @@ async function loadTeacherClassesFromSupabase(){
   }
 
   teacherClassesCache = (data || []).map(mapSupabaseClass);
+
+  // Load all activity days for the teacher's classes in one query.
+  const classIds = teacherClassesCache.map(cls => cls.id);
+  if(classIds.length){
+    const { data: activityRows, error: activityError } = await client
+      .from("activities")
+      .select("id, class_id, day_number, topic, questions, created_at, updated_at")
+      .in("class_id", classIds)
+      .order("day_number", { ascending: true });
+
+    if(activityError){
+      console.error("Unable to load activities from Supabase:", activityError);
+      alert("Classes loaded, but activities could not be loaded: " + activityError.message);
+    }else{
+      const grouped = new Map();
+      (activityRows || []).forEach(row => {
+        const key = String(row.class_id);
+        if(!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push({
+          id: row.id,
+          day: Number(row.day_number),
+          title: row.topic || "",
+          questions: Array.isArray(row.questions) ? row.questions : []
+        });
+      });
+
+      teacherClassesCache.forEach(cls => {
+        const cloudActivities = grouped.get(String(cls.id)) || [];
+        cls.activities = cloudActivities.length
+          ? cloudActivities
+          : getDefaultActivitiesForLevel(cls.level, cls.courseDays);
+      });
+    }
+  }
+
   teacherClassesLoadedFromCloud = true;
   localStorage.setItem(TEACHER_CLASSES_KEY, JSON.stringify(teacherClassesCache));
   renderTeacherDashboard();
@@ -2182,6 +2217,35 @@ async function createTeacherClass(){
   }
 
   const newClass = mapSupabaseClass(data);
+  const defaultActivities = getDefaultActivitiesForLevel(level, courseDays);
+  const activityPayload = defaultActivities.map(activity => ({
+    class_id: data.id,
+    day_number: activity.day,
+    topic: activity.title,
+    questions: activity.questions,
+    updated_at: new Date().toISOString()
+  }));
+
+  const { data: createdActivities, error: activitiesError } = await client
+    .from("activities")
+    .insert(activityPayload)
+    .select("id, class_id, day_number, topic, questions, created_at, updated_at")
+    .order("day_number", { ascending: true });
+
+  if(activitiesError){
+    console.error("Supabase activity creation error:", activitiesError);
+    // Roll back the newly created class so the database is not left incomplete.
+    await client.from("classes").delete().eq("id", data.id).eq("teacher_id", selfTalkUser.id);
+    alert("The class could not be completed because its activities were not created: " + activitiesError.message);
+    return;
+  }
+
+  newClass.activities = (createdActivities || []).map(row => ({
+    id: row.id,
+    day: Number(row.day_number),
+    title: row.topic || "",
+    questions: Array.isArray(row.questions) ? row.questions : []
+  }));
   teacherClassesCache = [newClass, ...getTeacherClasses().filter(c => String(c.id) !== String(newClass.id))];
   setTeacherClasses(teacherClassesCache);
 
@@ -2300,6 +2364,16 @@ async function deleteTeacherClass(id){
   if(selfTalkUser){
     const client = initSupabase();
     if(!client) return;
+    const { error: activityDeleteError } = await client
+      .from("activities")
+      .delete()
+      .eq("class_id", id);
+    if(activityDeleteError){
+      console.error("Supabase activity deletion error:", activityDeleteError);
+      alert("Could not delete the class activities: " + activityDeleteError.message);
+      return;
+    }
+
     const { error } = await client
       .from("classes")
       .delete()
@@ -2412,31 +2486,70 @@ function openActivitiesEditor(classId){
   setTimeout(()=>document.getElementById("activitiesEditor").scrollIntoView({behavior:"smooth"}), 100);
 }
 
-function saveTeacherActivities(){
+async function saveTeacherActivities(){
   if(!activeTeacherClassId) return;
 
   const classes = getTeacherClasses();
   const cls = classes.find(c => String(c.id) === String(activeTeacherClassId));
   if(!cls) return;
+  if(!selfTalkUser){
+    alert("Please log in with Google to save activities in Supabase.");
+    return;
+  }
 
-  cls.activities = cls.activities.map(activity => {
+  const editedActivities = cls.activities.map(activity => {
     const card = document.querySelector(`.activity-edit-card[data-activity-day="${activity.day}"]`);
     const titleInput = card ? card.querySelector('[data-field="title"]') : null;
     const questionInputs = card ? [...card.querySelectorAll('[data-field="question"]')] : [];
+    const questions = questionInputs.map(input => input.value.trim()).filter(Boolean);
 
     return {
+      id: activity.id || null,
       day: activity.day,
       title: titleInput ? titleInput.value.trim() : activity.title,
-      questions: questionInputs.map(input => input.value.trim()).filter(Boolean)
+      questions: questions.length ? questions : [""]
     };
   });
 
+  const client = initSupabase();
+  if(!client) return;
+
+  const saveButton = document.querySelector('#activitiesEditor button[onclick="saveTeacherActivities()"]');
+  if(saveButton){ saveButton.disabled = true; saveButton.textContent = "Saving..."; }
+
+  const payload = editedActivities.map(activity => ({
+    class_id: cls.id,
+    day_number: activity.day,
+    topic: activity.title,
+    questions: activity.questions,
+    updated_at: new Date().toISOString()
+  }));
+
+  const { data, error } = await client
+    .from("activities")
+    .upsert(payload, { onConflict: "class_id,day_number" })
+    .select("id, class_id, day_number, topic, questions, created_at, updated_at")
+    .order("day_number", { ascending: true });
+
+  if(saveButton){ saveButton.disabled = false; saveButton.textContent = "Save Activities"; }
+
+  if(error){
+    console.error("Supabase activity save error:", error);
+    alert("Could not save activities: " + error.message);
+    return;
+  }
+
+  cls.activities = (data || []).map(row => ({
+    id: row.id,
+    day: Number(row.day_number),
+    title: row.topic || "",
+    questions: Array.isArray(row.questions) ? row.questions : []
+  }));
   setTeacherClasses(classes);
-  alert("Activities saved successfully.");
   renderTeacherDashboard();
   openActivitiesEditor(activeTeacherClassId);
+  alert("Activities saved successfully in Supabase.");
 }
-
 
 
 let activeStudentClassId = null;
@@ -2560,3 +2673,4 @@ function hideActivitiesEditor(){
 </script>
 </body>
 </html>
+
