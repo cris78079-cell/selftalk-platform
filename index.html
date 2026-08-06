@@ -1250,7 +1250,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
       <div class="bar"><div id="progressFill"></div></div>
       <div class="stats">
         <div class="stat"><strong id="completedCount">0</strong><span>Completed</span></div>
-        <div class="stat"><strong>10</strong><span>Total Days</span></div>
+        <div class="stat"><strong id="totalDaysCount">10</strong><span>Total Days</span></div>
         <div class="stat"><strong id="remainingCount">10</strong><span>Remaining</span></div>
       </div>
     </div>
@@ -1267,14 +1267,6 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
     <p>Select a day, review the topic, record your response, and save it when it reaches the minimum duration.</p>
   </div>
   <div class="days-grid" id="daysGrid"></div>
-</section>
-
-<section class="storage-card">
-  <div>
-    <h2>📁 Recording Storage Folder</h2>
-    <p>Recordings are grouped by day in a folder-style library. Later, this same structure can be migrated to Supabase Storage.</p>
-  </div>
-  <button class="btn primary" onclick="openStorageModal()">Open Storage Folder</button>
 </section>
 
 <footer>SelfTalk © 2026 — Practice. Improve. Speak with Confidence.</footer>
@@ -1648,6 +1640,8 @@ function renderProgress(){
  document.getElementById("progressPercent").textContent=percent+"%";
  document.getElementById("progressFill").style.width=percent+"%";
  document.getElementById("completedCount").textContent=completed;
+ const totalDaysEl=document.getElementById("totalDaysCount");
+ if(totalDaysEl) totalDaysEl.textContent=TOTAL_COURSE_DAYS;
  document.getElementById("remainingCount").textContent=Math.max(0,TOTAL_COURSE_DAYS-completed);
  const profile=getProfile();
  document.getElementById("certificateBtn").disabled=!(completed===TOTAL_COURSE_DAYS && profile.name && profile.country);
@@ -1862,6 +1856,24 @@ loadProfile();renderDays();
 
 <script>
 let homeSelectedLevel = "Beginner";
+
+function updateSelfTalkUrl({module = null, level = null, classId = null} = {}){
+  const url = new URL(window.location.href);
+  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
+  if(module) url.searchParams.set("module", module);
+  if(level) url.searchParams.set("level", level);
+  if(classId) url.searchParams.set("class", classId);
+  url.hash = "";
+  window.history.pushState({module, level, classId}, "", url.pathname + (url.search ? url.search : ""));
+}
+
+function resetSelfTalkToHomeUrl(){
+  const url = new URL(window.location.href);
+  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
+  url.hash = "";
+  window.history.pushState({module:"home"}, "", url.pathname + (url.search ? url.search : ""));
+}
+
 function openRoleModal(level){
   homeSelectedLevel = level;
   localStorage.setItem("selftalk_selected_level", level);
@@ -1883,6 +1895,7 @@ function startIndependentFromHome(){
   const url = new URL(window.location.href);
   url.searchParams.set("module", "student");
   url.searchParams.set("level", homeSelectedLevel);
+  url.searchParams.delete("class");
   window.location.href = url.toString();
 }
 async function joinClassFromHome(profileAlreadyConfirmed = false){
@@ -1973,6 +1986,8 @@ function goHome(){
   closeModal("certModal");
   closeModal("profileModal");
 
+  activeStudentClass = null;
+  resetSelfTalkToHomeUrl();
   document.body.scrollTop = 0;
   document.documentElement.scrollTop = 0;
   window.scrollTo({top:0, behavior:"smooth"});
@@ -1999,7 +2014,21 @@ function goHome(){
       }
     });
   }
+  if(module === "teacher"){
+    window.addEventListener("DOMContentLoaded", function(){
+      const home = document.getElementById("homePage");
+      const student = document.getElementById("studentModule");
+      const teacher = document.getElementById("teacherModule");
+      if(home) home.style.display = "none";
+      if(student) student.style.display = "none";
+      if(teacher) teacher.style.display = "block";
+    });
+  }
 })();
+
+window.addEventListener("popstate", function(){
+  window.location.reload();
+});
 </script>
 
 
@@ -2246,6 +2275,7 @@ async function activateTeacherPremium(){
   document.getElementById("homePage").style.display = "none";
   document.getElementById("studentModule").style.display = "none";
   document.getElementById("teacherModule").style.display = "block";
+  updateSelfTalkUrl({module:"teacher"});
   renderTeacherDashboard();
   await loadTeacherClassesFromSupabase();
   window.scrollTo({top:0, behavior:"smooth"});
@@ -2255,6 +2285,7 @@ function goHomeFromTeacher(){
   document.getElementById("teacherModule").style.display = "none";
   document.getElementById("studentModule").style.display = "none";
   document.getElementById("homePage").style.display = "block";
+  resetSelfTalkToHomeUrl();
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
@@ -3039,6 +3070,8 @@ async function loadJoinedClassExperience(){
   const meta = document.getElementById("joinedClassMeta");
   if(meta) meta.textContent = `Code: ${classRow.class_code} • ${level} • Minimum recording: ${Math.ceil(MIN_SECONDS/60)} minute(s)`;
 
+  const totalDaysDisplay = document.getElementById("totalDaysCount");
+  if(totalDaysDisplay) totalDaysDisplay.textContent = TOTAL_COURSE_DAYS;
   const remaining = document.getElementById("remainingCount");
   if(remaining) remaining.textContent = TOTAL_COURSE_DAYS;
   const certText = document.querySelector('#certModal .modal-head p');
