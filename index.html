@@ -1876,16 +1876,16 @@ function resetSelfTalkToHomeUrl(){
 
 function forceNavigateSelfTalk({module = null, level = null, classId = null} = {}){
   const url = new URL(window.location.href);
-  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
+  ["module", "level", "class", "_reload"].forEach(key => url.searchParams.delete(key));
   if(module) url.searchParams.set("module", module);
   if(level) url.searchParams.set("level", level);
   if(classId) url.searchParams.set("class", classId);
-  url.hash = "";
 
-  // First replace the current history entry, then force a real document reload.
-  // This prevents class variables, topics and course duration from remaining in memory.
-  window.history.replaceState({module, level, classId}, "", url.pathname + (url.search ? url.search : ""));
-  window.location.reload();
+  // A unique query value forces a real document navigation on GitHub Pages.
+  // window.location.replace() loads the HTML again instead of only changing SPA state.
+  url.searchParams.set("_reload", String(Date.now()));
+  url.hash = "";
+  window.location.replace(url.toString());
 }
 
 function openRoleModal(level){
@@ -2026,6 +2026,12 @@ function goHome(){
 <script>
 (function(){
   const params = new URLSearchParams(window.location.search);
+  if(params.has("_reload")){
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("_reload");
+    window.history.replaceState({}, "", cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+    params.delete("_reload");
+  }
   const module = params.get("module");
   const selected = params.get("level");
   if(selected){
