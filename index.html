@@ -1874,6 +1874,20 @@ function resetSelfTalkToHomeUrl(){
   window.history.pushState({module:"home"}, "", url.pathname + (url.search ? url.search : ""));
 }
 
+function forceNavigateSelfTalk({module = null, level = null, classId = null} = {}){
+  const url = new URL(window.location.href);
+  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
+  if(module) url.searchParams.set("module", module);
+  if(level) url.searchParams.set("level", level);
+  if(classId) url.searchParams.set("class", classId);
+  url.hash = "";
+
+  // First replace the current history entry, then force a real document reload.
+  // This prevents class variables, topics and course duration from remaining in memory.
+  window.history.replaceState({module, level, classId}, "", url.pathname + (url.search ? url.search : ""));
+  window.location.reload();
+}
+
 function openRoleModal(level){
   homeSelectedLevel = level;
   localStorage.setItem("selftalk_selected_level", level);
@@ -1920,19 +1934,10 @@ function initializeIndependentExperience(selectedLevel){
 
 function startIndependentFromHome(){
   localStorage.setItem("selftalk_selected_level", homeSelectedLevel);
-  initializeIndependentExperience(homeSelectedLevel);
   closeModal("studentChoicesModal");
-  document.getElementById("homePage").style.display = "none";
-  document.getElementById("studentModule").style.display = "block";
-  document.getElementById("levelName").textContent = homeSelectedLevel;
-
-  // Reload to apply the selected level, its topics, and its own storage keys.
-  const url = new URL(window.location.href);
-  url.searchParams.set("module", "student");
-  url.searchParams.set("level", homeSelectedLevel);
-  url.searchParams.delete("class");
-  window.location.href = url.toString();
+  forceNavigateSelfTalk({module:"student", level:homeSelectedLevel});
 }
+
 async function joinClassFromHome(profileAlreadyConfirmed = false){
   const codeInput = document.getElementById("classCodeInput");
   const code = codeInput.value.trim().toUpperCase();
@@ -2000,11 +2005,11 @@ async function joinClassFromHome(profileAlreadyConfirmed = false){
     }
 
     closeModal("studentChoicesModal");
-    const url = new URL(window.location.href);
-    url.searchParams.set("module", "student");
-    url.searchParams.set("class", classRow.id);
-    url.searchParams.set("level", classRow.level || "Beginner");
-    window.location.href = url.toString();
+    forceNavigateSelfTalk({
+      module:"student",
+      level:classRow.level || "Beginner",
+      classId:classRow.id
+    });
   }catch(error){
     console.error("Join class error:", error);
     alert("The class could not be joined: " + error.message);
@@ -2013,13 +2018,7 @@ async function joinClassFromHome(profileAlreadyConfirmed = false){
   }
 }
 function goHome(){
-  // Build a clean Home URL and reload the document. A full reload clears
-  // class-specific variables (days, topics, timers and recordings) that
-  // otherwise remain in JavaScript memory after leaving a teacher class.
-  const url = new URL(window.location.href);
-  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
-  url.hash = "";
-  window.location.replace(url.pathname + (url.search ? url.search : ""));
+  forceNavigateSelfTalk();
 }
 </script>
 
@@ -2306,8 +2305,8 @@ async function loadTeacherClassesFromSupabase(){
 
 function continueAsTeacher(){
   // Development mode: allow access to the Teacher dashboard without Google login.
-  // Restore authentication validation here before publishing the production version.
-  activateTeacherPremium();
+  // Use a full navigation so student/class state cannot leak into the teacher module.
+  forceNavigateSelfTalk({module:"teacher"});
 }
 
 async function activateTeacherPremium(){
@@ -2315,18 +2314,13 @@ async function activateTeacherPremium(){
   document.getElementById("homePage").style.display = "none";
   document.getElementById("studentModule").style.display = "none";
   document.getElementById("teacherModule").style.display = "block";
-  updateSelfTalkUrl({module:"teacher"});
   renderTeacherDashboard();
   await loadTeacherClassesFromSupabase();
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
 function goHomeFromTeacher(){
-  document.getElementById("teacherModule").style.display = "none";
-  document.getElementById("studentModule").style.display = "none";
-  document.getElementById("homePage").style.display = "block";
-  resetSelfTalkToHomeUrl();
-  window.scrollTo({top:0, behavior:"smooth"});
+  forceNavigateSelfTalk();
 }
 
 function showTeacherSection(section){
