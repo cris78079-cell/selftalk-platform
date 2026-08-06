@@ -882,31 +882,6 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 .certificate-help{margin-top:12px;padding:12px;border-radius:14px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.18);font-size:13px;color:#1e3a8a;line-height:1.45}
 @media(max-width:900px){.certificate-settings-grid{grid-template-columns:1fr}.certificate-preview-meta{grid-template-columns:1fr}.certificate-preview-provider{grid-template-columns:1fr}.certificate-preview-provider .provider-right{text-align:left}}
 
-
-/* Temporary end-to-end certificate test mode */
-.certificate-e2e-panel{
-  position:fixed;
-  right:18px;
-  bottom:18px;
-  z-index:5000;
-  width:min(370px,calc(100vw - 36px));
-  padding:15px;
-  background:#fff;
-  border:1px solid var(--border);
-  border-radius:18px;
-  box-shadow:0 20px 48px rgba(15,23,42,.25);
-}
-.certificate-e2e-panel h3{margin:0 0 6px;font-size:16px}
-.certificate-e2e-panel p{margin:0 0 12px;font-size:12px}
-.certificate-e2e-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.certificate-e2e-actions button{
-  border:0;border-radius:12px;padding:10px;
-  font-weight:900;cursor:pointer;
-}
-#testIndependentCertificate{background:#22c55e;color:#063b1d}
-#testClassCertificate{background:#0f172a;color:#fff}
-#exitCertificateTest{margin-top:8px;width:100%;background:#e2e8f0;color:#0f172a}
-
 </style>
 </head>
 <body>
@@ -1910,23 +1885,8 @@ function openCertificate(){
  const profile=getProfile(), completed=getCompletedDays().length;
  if(completed<TOTAL_COURSE_DAYS){alert(`Complete all ${TOTAL_COURSE_DAYS} days first.`);return}
  if(!profile.name || !profile.country){alert("Please save your participant details first.");return}
-
- const isTeacherClass=Boolean(activeStudentClass && activeStudentClass.id);
- const className=isTeacherClass
-   ? (activeStudentClass.class_name || activeStudentClass.className || "Teacher Class")
-   : `SelfTalk ${TOTAL_COURSE_DAYS}-Day Speaking Challenge`;
- const institutionName=isTeacherClass
-   ? (activeStudentClass.certificate_institution || activeStudentClass.institution_name || activeStudentClass.institutionName || "Independent")
-   : "SelfTalk";
- const instructorName=isTeacherClass
-   ? (activeStudentClass.certificate_instructor || activeStudentClass.instructorName || "Teacher")
-   : getCertificateProviderName();
- const certificatePrefix=isTeacherClass ? "ST-CLS" : "ST-IND";
-
  document.getElementById("certName").textContent=profile.name;
- document.getElementById("certDetails").textContent=isTeacherClass
-   ? `${className} · Teacher Class`
-   : `${className} · Independent Practice`;
+ document.getElementById("certDetails").textContent=`SelfTalk 10-Day Speaking Challenge`;
  const certLevel=document.getElementById("certLevel");
  if(certLevel) certLevel.textContent=level;
  const certProgress=document.getElementById("certProgressText");
@@ -1934,11 +1894,11 @@ function openCertificate(){
  const certIssued=document.getElementById("certIssued");
  if(certIssued) certIssued.textContent=new Date().toLocaleDateString();
  const certId=document.getElementById("certCertificateId");
- if(certId) certId.textContent=`${certificatePrefix}-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+ if(certId) certId.textContent=`ST-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
  const institution=document.getElementById("certInstitutionName");
- if(institution) institution.textContent=institutionName;
+ if(institution) institution.textContent="SelfTalk";
  const provider=document.getElementById("certInstructorName");
- if(provider) provider.textContent=instructorName;
+ if(provider) provider.textContent=getCertificateProviderName();
  openModal("certModal");
 }
 document.querySelectorAll(".modal-backdrop").forEach(b=>b.addEventListener("click",e=>{if(e.target===b){b.classList.remove("active");if(b.id==="challengeModal"){stopCamera();stopTimer()}}}));
@@ -3384,122 +3344,6 @@ loadTeacherClassesFromSupabase = async function(){
   await loadRealTeacherStudents();
   return result;
 };
-</script>
-
-
-<div id="certificateE2EPanel" class="certificate-e2e-panel">
-  <h3>Certificate End-to-End Test</h3>
-  <p>Simulates 100% progress using the real certificate function. It does not write recordings to Supabase.</p>
-  <div class="certificate-e2e-actions">
-    <button id="testIndependentCertificate" type="button">Test Independent</button>
-    <button id="testClassCertificate" type="button">Test Private Class</button>
-  </div>
-  <button id="exitCertificateTest" type="button">Restore Normal State</button>
-</div>
-
-
-<script>
-(function(){
-  const qaState = {
-    recordings: null,
-    activeClass: null,
-    level: null,
-    totalDays: null,
-    minSeconds: null,
-    profileRaw: null
-  };
-
-  function saveCurrentState(){
-    qaState.recordings = Array.isArray(cloudRecordings) ? [...cloudRecordings] : [];
-    qaState.activeClass = activeStudentClass;
-    qaState.level = level;
-    qaState.totalDays = TOTAL_COURSE_DAYS;
-    qaState.minSeconds = MIN_SECONDS;
-    qaState.profileRaw = localStorage.getItem(PROFILE_KEY);
-  }
-
-  function makeCompletedRecordings(totalDays){
-    return Array.from({length:totalDays}, (_,index)=>({
-      id:`certificate-test-${index+1}`,
-      day:index+1,
-      day_number:index+1,
-      duration:Math.max(MIN_SECONDS,120),
-      duration_seconds:Math.max(MIN_SECONDS,120),
-      status:"selected",
-      is_valid:true,
-      createdAt:new Date().toISOString(),
-      created_at:new Date().toISOString()
-    }));
-  }
-
-  function ensureTestProfile(){
-    const current = getProfile();
-    localStorage.setItem(PROFILE_KEY, JSON.stringify({
-      ...current,
-      name: current.name || "Cristian Adrian Játiva Reyes",
-      country: current.country || "Ecuador"
-    }));
-  }
-
-  function runIndependentTest(){
-    saveCurrentState();
-    activeStudentClass = null;
-    level = "Intermediate";
-    TOTAL_COURSE_DAYS = 10;
-    MIN_SECONDS = getMinimumSecondsByLevel(level);
-    cloudRecordings = makeCompletedRecordings(TOTAL_COURSE_DAYS);
-    ensureTestProfile();
-    renderProgress();
-    openCertificate();
-  }
-
-  function runClassTest(){
-    saveCurrentState();
-    activeStudentClass = {
-      id:"certificate-test-class",
-      class_name:"English Conversation B1",
-      class_code:"TEST10",
-      level:"Intermediate",
-      course_days:10,
-      certificate_institution:"Universidad Técnica Estatal de Quevedo",
-      certificate_instructor:"Cristian Játiva"
-    };
-    level = "Intermediate";
-    TOTAL_COURSE_DAYS = 10;
-    MIN_SECONDS = 120;
-    cloudRecordings = makeCompletedRecordings(TOTAL_COURSE_DAYS);
-    ensureTestProfile();
-    renderProgress();
-    openCertificate();
-  }
-
-  function restoreNormalState(){
-    if(qaState.recordings !== null) cloudRecordings = qaState.recordings;
-    if(qaState.totalDays !== null) TOTAL_COURSE_DAYS = qaState.totalDays;
-    if(qaState.minSeconds !== null) MIN_SECONDS = qaState.minSeconds;
-    if(qaState.level !== null) level = qaState.level;
-    activeStudentClass = qaState.activeClass;
-
-    if(qaState.profileRaw === null) localStorage.removeItem(PROFILE_KEY);
-    else localStorage.setItem(PROFILE_KEY, qaState.profileRaw);
-
-    renderDays();
-    closeModal("certModal");
-    alert("Normal state restored. No Supabase data was changed.");
-  }
-
-  function bindCertificateTests(){
-    document.getElementById("testIndependentCertificate")?.addEventListener("click", runIndependentTest);
-    document.getElementById("testClassCertificate")?.addEventListener("click", runClassTest);
-    document.getElementById("exitCertificateTest")?.addEventListener("click", restoreNormalState);
-  }
-
-  if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", bindCertificateTests);
-  }else{
-    bindCertificateTests();
-  }
-})();
 </script>
 
 </body>
