@@ -2471,20 +2471,6 @@ function renderTeacherClassList(containerId, classes){
   }
 
   container.innerHTML = "";
-  let feedbackRows = [];
-  if(recordings.length){
-    const recordingIds=recordings.map(r=>r.id);
-    const {data:feedbackData,error:feedbackError}=await client
-      .from("recording_feedback")
-      .select("recording_id, class_id, student_id, feedback, motivation, reviewed_at, updated_at")
-      .in("recording_id",recordingIds);
-    if(feedbackError){
-      console.warn("Teacher feedback could not be loaded:",feedbackError);
-    }else{
-      feedbackRows=feedbackData||[];
-    }
-  }
-
   classes.forEach(cls => {
     const item = document.createElement("article");
     item.className = "class-item";
@@ -3084,6 +3070,21 @@ async function loadRealTeacherStudents(){
       alert("Students were loaded, but submitted videos could not be loaded: " + recordingError.message);
     }else{
       recordings = recordingRows || [];
+    }
+  }
+
+  let feedbackRows = [];
+  if(recordings.length){
+    const recordingIds = recordings.map(r => r.id);
+    const { data: feedbackData, error: feedbackError } = await client
+      .from("recording_feedback")
+      .select("recording_id, class_id, student_id, feedback, motivation, reviewed_at, updated_at")
+      .in("recording_id", recordingIds);
+
+    if(feedbackError){
+      console.warn("Teacher feedback could not be loaded:", feedbackError);
+    }else{
+      feedbackRows = feedbackData || [];
     }
   }
 
