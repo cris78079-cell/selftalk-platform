@@ -2248,8 +2248,25 @@ async function loadGoogleSession(){
   });
 }
 
-document.addEventListener("DOMContentLoaded", loadGoogleSession);
-document.addEventListener("DOMContentLoaded", initializeTeacherCourseDates);
+document.addEventListener("DOMContentLoaded", async function(){
+  await loadGoogleSession();
+  initializeTeacherCourseDates();
+
+  const params = new URLSearchParams(window.location.search);
+  if(params.get("module") === "teacher"){
+    const home = document.getElementById("homePage");
+    const student = document.getElementById("studentModule");
+    const teacher = document.getElementById("teacherModule");
+
+    if(home) home.style.display = "none";
+    if(student) student.style.display = "none";
+    if(teacher) teacher.style.display = "block";
+
+    showTeacherSection("dashboard");
+    renderTeacherDashboard();
+    await loadTeacherClassesFromSupabase();
+  }
+});
 </script>
 
 
