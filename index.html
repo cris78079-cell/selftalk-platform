@@ -2872,11 +2872,15 @@ function renderTeacherStudentClasses(){
 }
 
 function openTeacherClassStudents(classId){
+  // Ensure the Students section is visible when this function is called
+  // from the Created Classes card or from any other teacher section.
+  showTeacherSection("students");
   activeStudentClassId=classId; activeTeacherStudentId=null;
   const classes=getTeacherClasses(); const cls=classes.find(c=>String(c.id)===String(classId)); if(!cls) return;
   document.getElementById("teacherStudentsClassesView").style.display="none";
   document.getElementById("teacherStudentsListView").style.display="block";
   document.getElementById("teacherStudentProfileView").style.display="none";
+  window.scrollTo({top:0, behavior:"smooth"});
   document.getElementById("selectedStudentClassName").textContent=cls.className;
   document.getElementById("teacherStudentsListTitle").textContent=cls.className+" Students";
   document.getElementById("teacherStudentsListMeta").textContent=`Code: ${cls.classCode} • Level: ${cls.level} • ${(cls.students||[]).length} enrolled`;
@@ -3287,4 +3291,5 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
+
 
