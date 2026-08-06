@@ -1884,8 +1884,43 @@ function openStudentChoices(){
   closeModal("homeRoleModal");
   openModal("studentChoicesModal");
 }
+function initializeIndependentExperience(selectedLevel){
+  const independentLevel = selectedLevel || localStorage.getItem("selftalk_selected_level") || "Beginner";
+
+  // Completely detach the student module from any previously opened teacher class.
+  activeStudentClass = null;
+  level = independentLevel;
+  TOTAL_COURSE_DAYS = 10;
+  MIN_SECONDS = getMinimumSecondsByLevel(level);
+  STORAGE_KEY = "selftalk_independent_recordings_v4_" + level.toLowerCase();
+  START_KEY = "selftalk_challenge_start_date_v4_" + level.toLowerCase();
+  topics = (topicsByLevel[level] || topicsByLevel.Beginner).map(item => ({
+    ...item,
+    questions: Array.isArray(item.questions) ? [...item.questions] : []
+  }));
+
+  const levelName = document.getElementById("levelName");
+  if(levelName) levelName.textContent = level;
+  const pill = document.getElementById("studentModePill");
+  if(pill) pill.innerHTML = `🎙️ Independent Practice • <strong>${level}</strong>`;
+  const heading = document.getElementById("studentChallengeHeading");
+  if(heading) heading.innerHTML = `Complete your <span>10-day speaking challenge.</span>`;
+  const description = document.getElementById("studentChallengeDescription");
+  if(description) description.textContent = "Select a day, review the topic, record your response, and save it when it reaches the minimum duration.";
+  const banner = document.getElementById("joinedClassBanner");
+  if(banner) banner.style.display = "none";
+  const totalDays = document.getElementById("totalDaysCount");
+  if(totalDays) totalDays.textContent = "10";
+  const certText = document.querySelector('#certModal .modal-head p');
+  if(certText) certText.textContent = "Certificate unlocked after completing all 10 days.";
+
+  // Clear class-only recording data held in memory before loading independent records.
+  cloudRecordings = [];
+}
+
 function startIndependentFromHome(){
   localStorage.setItem("selftalk_selected_level", homeSelectedLevel);
+  initializeIndependentExperience(homeSelectedLevel);
   closeModal("studentChoicesModal");
   document.getElementById("homePage").style.display = "none";
   document.getElementById("studentModule").style.display = "block";
@@ -1987,6 +2022,8 @@ function goHome(){
   closeModal("profileModal");
 
   activeStudentClass = null;
+  TOTAL_COURSE_DAYS = 10;
+  cloudRecordings = [];
   resetSelfTalkToHomeUrl();
   document.body.scrollTop = 0;
   document.documentElement.scrollTop = 0;
@@ -2010,6 +2047,17 @@ function goHome(){
       if(home && student){
         home.style.display = "none";
         student.style.display = "block";
+        const currentParams = new URLSearchParams(window.location.search);
+        if(!currentParams.get("class")){
+          initializeIndependentExperience(currentParams.get("level") || selected || "Beginner");
+          if(typeof loadCloudRecordings === "function"){
+            loadCloudRecordings().then(() => {
+              if(typeof renderDays === "function") renderDays();
+            });
+          }else if(typeof renderDays === "function"){
+            renderDays();
+          }
+        }
         if(typeof checkProfileOnLoad === "function") checkProfileOnLoad();
       }
     });
