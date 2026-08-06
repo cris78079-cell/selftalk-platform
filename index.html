@@ -993,7 +993,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 
   <main class="teacher-shell">
     <div class="beta-banner">
-      ✅ Premium access is currently FREE during product testing. Classes are synchronized with Supabase when you are logged in.
+      ✅ Premium access is currently FREE during product testing.
     </div>
 
     <section id="teacherCertificateSection" style="display:none;">
@@ -2185,6 +2185,15 @@ async function loadGoogleSession(){
   selfTalkUser = data && data.session ? data.session.user : null;
   updateGoogleLoginUI(selfTalkUser);
 
+  // When the page opens directly in teacher mode after a full navigation,
+  // load the teacher's cloud classes after the Supabase session is restored.
+  const currentModule = new URLSearchParams(window.location.search).get("module");
+  if(currentModule === "teacher" && selfTalkUser && typeof loadTeacherClassesFromSupabase === "function"){
+    await loadTeacherClassesFromSupabase();
+  }else if(currentModule === "teacher" && typeof renderTeacherDashboard === "function"){
+    renderTeacherDashboard();
+  }
+
   client.auth.onAuthStateChange(function(event, session){
     selfTalkUser = session && session.user ? session.user : null;
     updateGoogleLoginUI(selfTalkUser);
@@ -3278,3 +3287,4 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
+
