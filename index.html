@@ -2013,21 +2013,13 @@ async function joinClassFromHome(profileAlreadyConfirmed = false){
   }
 }
 function goHome(){
-  document.getElementById("studentModule").style.display = "none";
-  document.getElementById("homePage").style.display = "block";
-
-  closeModal("challengeModal");
-  closeModal("storageModal");
-  closeModal("certModal");
-  closeModal("profileModal");
-
-  activeStudentClass = null;
-  TOTAL_COURSE_DAYS = 10;
-  cloudRecordings = [];
-  resetSelfTalkToHomeUrl();
-  document.body.scrollTop = 0;
-  document.documentElement.scrollTop = 0;
-  window.scrollTo({top:0, behavior:"smooth"});
+  // Build a clean Home URL and reload the document. A full reload clears
+  // class-specific variables (days, topics, timers and recordings) that
+  // otherwise remain in JavaScript memory after leaving a teacher class.
+  const url = new URL(window.location.href);
+  ["module", "level", "class"].forEach(key => url.searchParams.delete(key));
+  url.hash = "";
+  window.location.replace(url.pathname + (url.search ? url.search : ""));
 }
 </script>
 
