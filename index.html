@@ -832,6 +832,8 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 .teacher-video-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.review-badge{padding:6px 9px;border-radius:999px;background:rgba(245,158,11,.13);color:#7c2d12;font-size:11px;font-weight:900}.review-badge.done{background:rgba(34,197,94,.14);color:#065f46}
 .teacher-video-layout{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}.video-placeholder{min-height:190px;border-radius:16px;background:#0f172a;color:#cbd5e1;display:grid;place-items:center;text-align:center;padding:18px}.teacher-video-layout video{min-height:190px}
 .feedback-box{display:grid;gap:9px}.feedback-box textarea,.feedback-box input{width:100%;border:1px solid var(--border);border-radius:14px;padding:11px;font-family:inherit}.feedback-box textarea{min-height:92px;resize:vertical}
+/* Student feedback inbox */
+.feedback-inbox{display:grid;gap:14px}.student-feedback-card{border:1px solid var(--border);border-radius:18px;padding:16px;background:#fff}.student-feedback-card h3{margin:0 0 6px}.student-feedback-card .feedback-meta{color:var(--muted);font-size:13px;margin-bottom:12px}.student-feedback-card .feedback-message{padding:12px 14px;border-radius:14px;background:#f8fafc;border:1px solid var(--border);margin-top:9px}.student-feedback-card .feedback-message strong{display:block;margin-bottom:5px}.student-feedback-empty{text-align:center;padding:28px;border:1px dashed var(--border);border-radius:18px;color:var(--muted)}
 .student-breadcrumb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;color:var(--muted);font-size:13px;font-weight:800}.student-breadcrumb button{border:0;background:transparent;color:#2563eb;font-weight:900;cursor:pointer;padding:0}
 @media(max-width:900px){.teacher-student-class-grid{grid-template-columns:1fr}.student-profile-data{grid-template-columns:1fr 1fr}.teacher-video-layout{grid-template-columns:1fr}}
 @media(max-width:560px){.student-profile-data{grid-template-columns:1fr}.teacher-student-row{grid-template-columns:1fr}.teacher-student-row .btn{width:100%}}
@@ -1219,6 +1221,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
       <div class="nav-actions">
         <button onclick="openProfileModal()">Participant Info</button>
         <button onclick="openStorageModal()">My Recordings</button>
+        <button onclick="openStudentFeedbackModal()">Teacher Feedback</button>
         <button onclick="goHome()">Back Home</button>
       </div>
     </nav>
@@ -1346,6 +1349,16 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
   </div>
 </div>
 
+<div class="modal-backdrop" id="studentFeedbackModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><h2>Teacher Feedback</h2><p>Review the comments and motivational messages your teacher has left on your submitted recordings.</p></div>
+      <button class="close-btn" onclick="closeModal('studentFeedbackModal')">×</button>
+    </div>
+    <div id="studentFeedbackList" class="feedback-inbox"></div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="certModal">
   <div class="modal">
     <div class="modal-head">
@@ -1406,6 +1419,7 @@ function getMinimumSecondsByLevel(levelName){
 let MIN_SECONDS = getMinimumSecondsByLevel(level);
 let TOTAL_COURSE_DAYS = 10;
 let activeStudentClass = null;
+let studentFeedbackCache = [];
 
 function minimumMinutesLabel(){
   return Math.floor(MIN_SECONDS / 60) + ":00 minutes";
@@ -2826,17 +2840,110 @@ function openTeacherStudentProfile(classId, studentId){
   }
 }
 
-function saveTeacherRecordingFeedback(classId, studentId, recordingId){
-  const classes=getTeacherClasses(); const cls=classes.find(c=>String(c.id)===String(classId)); if(!cls) return;
-  const st=(cls.students||[]).find(s=>String(s.id)===String(studentId)); if(!st) return;
+async function saveTeacherRecordingFeedback(classId, studentId, recordingId){
+  const classes=getTeacherClasses();
+  const cls=classes.find(c=>String(c.id)===String(classId));
+  if(!cls) return;
+  const st=(cls.students||[]).find(s=>String(s.id)===String(studentId));
+  if(!st) return;
   const feedback=document.getElementById(`feedback-${recordingId}`).value.trim();
   const motivation=document.getElementById(`motivation-${recordingId}`).value.trim();
+  if(!feedback && !motivation){
+    alert("Write feedback or a motivational message before saving.");
+    return;
+  }
+  const client=initSupabase();
+  if(!client || !selfTalkUser){
+    alert("Please sign in again before saving feedback.");
+    return;
+  }
+  const now=new Date().toISOString();
+  const payload={
+    recording_id:recordingId,
+    class_id:classId,
+    student_id:studentId,
+    teacher_id:selfTalkUser.id,
+    feedback,
+    motivation,
+    reviewed_at:now,
+    updated_at:now
+  };
+  const {data,error}=await client
+    .from("recording_feedback")
+    .upsert(payload,{onConflict:"recording_id"})
+    .select()
+    .single();
+  if(error){
+    console.error("Feedback could not be saved:",error);
+    alert("Feedback could not be saved: "+error.message);
+    return;
+  }
   st.feedback=st.feedback||{};
-  st.feedback[recordingId]={feedback,motivation,reviewed:Boolean(feedback||motivation),updatedAt:new Date().toISOString()};
-  setTeacherClasses(classes);
+  st.feedback[recordingId]={
+    feedback:data.feedback||"",
+    motivation:data.motivation||"",
+    reviewed:true,
+    updatedAt:data.updated_at||now
+  };
   openTeacherStudentProfile(classId,studentId);
-  alert("Feedback saved for this recording.");
+  alert("Feedback saved. The student can now see it in Teacher Feedback.");
 }
+
+async function loadStudentFeedback(){
+  studentFeedbackCache=[];
+  if(!selfTalkUser || !activeStudentClass || !activeStudentClass.id) return [];
+  const client=initSupabase();
+  if(!client) return [];
+  const {data,error}=await client
+    .from("recording_feedback")
+    .select("id, recording_id, class_id, student_id, feedback, motivation, reviewed_at, updated_at")
+    .eq("student_id",selfTalkUser.id)
+    .eq("class_id",activeStudentClass.id)
+    .order("updated_at",{ascending:false});
+  if(error){
+    console.error("Unable to load teacher feedback:",error);
+    return [];
+  }
+  studentFeedbackCache=data||[];
+  return studentFeedbackCache;
+}
+
+async function openStudentFeedbackModal(){
+  if(!activeStudentClass || !activeStudentClass.id){
+    alert("Teacher feedback is available only when you are inside a teacher's class.");
+    return;
+  }
+  const list=document.getElementById("studentFeedbackList");
+  if(list) list.innerHTML='<div class="student-feedback-empty">Loading feedback...</div>';
+  openModal("studentFeedbackModal");
+  await loadStudentFeedback();
+  renderStudentFeedback();
+}
+
+function renderStudentFeedback(){
+  const list=document.getElementById("studentFeedbackList");
+  if(!list) return;
+  if(!studentFeedbackCache.length){
+    list.innerHTML='<div class="student-feedback-empty"><strong>No feedback yet.</strong><br>Your teacher’s comments will appear here after reviewing a submitted recording.</div>';
+    return;
+  }
+  const recordings=getRecordings();
+  list.innerHTML="";
+  studentFeedbackCache.forEach(item=>{
+    const rec=recordings.find(r=>String(r.id)===String(item.recording_id));
+    const day=Number((rec && (rec.day||rec.day_number))||0);
+    const topic=(topics||[]).find(t=>Number(t.day)===day);
+    const title=topic && topic.title ? topic.title.replace(/^Day \d+:\s*/,"") : "";
+    const card=document.createElement("article");
+    card.className="student-feedback-card";
+    card.innerHTML=`<h3>${day?`Day ${day}`:"Submitted recording"}${title?` — ${escapeActivityValue(title)}`:""}</h3>
+      <div class="feedback-meta">Reviewed ${new Date(item.reviewed_at||item.updated_at).toLocaleString()}</div>
+      ${item.feedback?`<div class="feedback-message"><strong>Teacher feedback</strong>${escapeActivityValue(item.feedback)}</div>`:""}
+      ${item.motivation?`<div class="feedback-message"><strong>Motivational message</strong>${escapeActivityValue(item.motivation)}</div>`:""}`;
+    list.appendChild(card);
+  });
+}
+
 
 function hideActivitiesEditor(){
   activeTeacherClassId = null;
@@ -2995,6 +3102,20 @@ async function loadRealTeacherStudents(){
     }
   }
 
+  let feedbackRows = [];
+  if(recordings.length){
+    const recordingIds = recordings.map(r => r.id);
+    const {data: feedbackData, error: feedbackError} = await client
+      .from("recording_feedback")
+      .select("recording_id, class_id, student_id, feedback, motivation, reviewed_at, updated_at")
+      .in("recording_id", recordingIds);
+    if(feedbackError){
+      console.warn("Teacher feedback could not be loaded:", feedbackError);
+    }else{
+      feedbackRows = feedbackData || [];
+    }
+  }
+
   // Create temporary private URLs so the teacher can play the videos.
   const recordingsWithUrls = await Promise.all(recordings.map(async row => {
     let signedUrl = "";
@@ -3043,7 +3164,17 @@ async function loadRealTeacherStudents(){
           country: p.country || "",
           institution: p.institution_name || "",
           joinedAt: e.joined_at,
-          recordings: studentRecordings
+          recordings: studentRecordings,
+          feedback: Object.fromEntries(
+            feedbackRows
+              .filter(f => String(f.student_id) === String(e.student_id) && String(f.class_id) === String(cls.id))
+              .map(f => [String(f.recording_id), {
+                feedback: f.feedback || "",
+                motivation: f.motivation || "",
+                reviewed: true,
+                updatedAt: f.updated_at || f.reviewed_at
+              }])
+          )
         };
       });
   });
