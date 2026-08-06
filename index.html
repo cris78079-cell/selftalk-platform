@@ -1633,8 +1633,12 @@ async function loadCloudRecordings(){
  const client=initSupabase();
  if(!client || !selfTalkUser){ setRecordings([]); return; }
  let query=client.from("recordings").select("*").eq("student_id",selfTalkUser.id).order("created_at",{ascending:true});
- if(activeStudentClass && activeStudentClass.id) query=query.eq("class_id",activeStudentClass.id);
- else query=query.is("class_id",null);
+ if(activeStudentClass && activeStudentClass.id){
+   query=query.eq("class_id",activeStudentClass.id);
+ }else{
+   const independentLevelPath=`%/independent/${level.toLowerCase()}/%`;
+   query=query.is("class_id",null).like("storage_path",independentLevelPath);
+ }
  const {data,error}=await query;
  if(error){ console.error("Could not load recordings",error); alert("The recordings could not be loaded: "+error.message); return; }
  setRecordings((data||[]).map(r=>({
@@ -1777,7 +1781,9 @@ async function finalizeSave(){
  const activityId=topic?.activityId || null;
  const existingAttempts=getRecordings().filter(r=>Number(r.day||r.day_number)===currentDay);
  const attemptNumber=existingAttempts.length+1;
- const storagePath=`${selfTalkUser.id}/${classId||"independent"}/day-${currentDay}/${recordingId}.webm`;
+ const storagePath=classId
+   ? `${selfTalkUser.id}/${classId}/day-${currentDay}/${recordingId}.webm`
+   : `${selfTalkUser.id}/independent/${level.toLowerCase()}/day-${currentDay}/${recordingId}.webm`;
  saveBtn.disabled=true;
  document.getElementById("recordingStatus").textContent="Uploading recording...";
  const {error:uploadError}=await client.storage.from(RECORDINGS_BUCKET).upload(storagePath,lastBlob,{contentType:"video/webm",upsert:false});
@@ -1803,7 +1809,11 @@ async function selectRecording(id){
  const client=initSupabase(); if(!client)return;
  const classId=activeStudentClass?.id || null; const day=Number(item.day||item.day_number);
  let reset=client.from("recordings").update({is_valid:false,status:"draft",submitted_at:null}).eq("student_id",selfTalkUser.id).eq("day_number",day);
- reset=classId?reset.eq("class_id",classId):reset.is("class_id",null);
+ if(classId){
+   reset=reset.eq("class_id",classId);
+ }else{
+   reset=reset.is("class_id",null).like("storage_path",`%/independent/${level.toLowerCase()}/%`);
+ }
  const {error:resetError}=await reset; if(resetError){alert("The previous selection could not be cleared: "+resetError.message);return}
  const {error}=await client.from("recordings").update({is_valid:true,status:"selected",submitted_at:new Date().toISOString()}).eq("id",id).eq("student_id",selfTalkUser.id);
  if(error){alert("The recording could not be selected: "+error.message);await loadCloudRecordings();return}
