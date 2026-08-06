@@ -957,7 +957,11 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
     </article>
   </div>
 
-  <footer style="margin-top:28px;">SelfTalk © 2026 — Practice. Improve. Speak with Confidence.</footer>
+  <footer style="margin-top:28px;">SelfTalk © 2026 — Practice. Improve. Speak with Confidence.<br>
+<span style="font-size:13px;color:#5b6475;">
+Need help or found a bug?<br>
+Support: SelfTalkPlatform@outlook.com
+</span></footer>
 </section>
 
 </div>
@@ -993,7 +997,7 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 
   <main class="teacher-shell">
     <div class="beta-banner">
-      ✅ Premium access is currently FREE during product testing.
+      ✅ Premium access is currently FREE during product testing. Classes are synchronized with Supabase when you are logged in.
     </div>
 
     <section id="teacherCertificateSection" style="display:none;">
@@ -2185,15 +2189,6 @@ async function loadGoogleSession(){
   selfTalkUser = data && data.session ? data.session.user : null;
   updateGoogleLoginUI(selfTalkUser);
 
-  // When the page opens directly in teacher mode after a full navigation,
-  // load the teacher's cloud classes after the Supabase session is restored.
-  const currentModule = new URLSearchParams(window.location.search).get("module");
-  if(currentModule === "teacher" && selfTalkUser && typeof loadTeacherClassesFromSupabase === "function"){
-    await loadTeacherClassesFromSupabase();
-  }else if(currentModule === "teacher" && typeof renderTeacherDashboard === "function"){
-    renderTeacherDashboard();
-  }
-
   client.auth.onAuthStateChange(function(event, session){
     selfTalkUser = session && session.user ? session.user : null;
     updateGoogleLoginUI(selfTalkUser);
@@ -2872,15 +2867,11 @@ function renderTeacherStudentClasses(){
 }
 
 function openTeacherClassStudents(classId){
-  // Ensure the Students section is visible when this function is called
-  // from the Created Classes card or from any other teacher section.
-  showTeacherSection("students");
   activeStudentClassId=classId; activeTeacherStudentId=null;
   const classes=getTeacherClasses(); const cls=classes.find(c=>String(c.id)===String(classId)); if(!cls) return;
   document.getElementById("teacherStudentsClassesView").style.display="none";
   document.getElementById("teacherStudentsListView").style.display="block";
   document.getElementById("teacherStudentProfileView").style.display="none";
-  window.scrollTo({top:0, behavior:"smooth"});
   document.getElementById("selectedStudentClassName").textContent=cls.className;
   document.getElementById("teacherStudentsListTitle").textContent=cls.className+" Students";
   document.getElementById("teacherStudentsListMeta").textContent=`Code: ${cls.classCode} • Level: ${cls.level} • ${(cls.students||[]).length} enrolled`;
@@ -3291,5 +3282,6 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
+
 
 
