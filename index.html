@@ -463,6 +463,37 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
   z-index:1;
 }
 
+.teacher-beta-price{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.teacher-price{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  white-space:nowrap;
+}
+.teacher-price-old{
+  text-decoration:line-through;
+  opacity:.65;
+  font-weight:700;
+}
+.teacher-price-arrow{
+  opacity:.7;
+}
+.teacher-price-free{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#22c55e;
+  color:#063b1d;
+  font-weight:1000;
+}
+
 @media(max-width:900px){
   .role-grid,
   .choice-grid{
@@ -1168,9 +1199,17 @@ Support: SelfTalkPlatform@outlook.com
             <li><span>✓</span> Create classes</li>
             <li><span>✓</span> Generate class codes</li>
             <li><span>✓</span> Customize duration</li>
-            <li><span>✓</span> Manage student progress later</li>
+            <li><span>✓</span> Manage student progress</li>
+            <li><span>✓</span> Up to 50 active students</li>
           </ul>
-          <div class="premium-note">Teacher Beta Access Enabled</div>
+          <div class="premium-note teacher-beta-price">
+              <span>Teacher Beta Access Enabled</span>
+              <span class="teacher-price">
+                <span class="teacher-price-old">$12.99/month</span>
+                <span class="teacher-price-arrow">→</span>
+                <span class="teacher-price-free">$0 FREE</span>
+              </span>
+            </div>
         </div>
         <button class="btn primary" onclick="continueAsTeacher()">Create Teacher Class</button>
       </article>
