@@ -1367,6 +1367,68 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
   margin-top:2px !important;
 }
 
+
+/* ===== Independent Premium Certificate: Teacher Trainer block fix ===== */
+.cert-footer.premium{
+  grid-template-columns:1fr 1fr 1.15fr !important;
+  gap:4% !important;
+  align-items:start !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated{
+  display:block !important;
+  text-align:center !important;
+  min-width:0 !important;
+  width:100% !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated > span{
+  display:block !important;
+  margin:0 0 2px !important;
+  color:#14893f !important;
+  font-size:10.5px !important;
+  font-weight:1000 !important;
+  letter-spacing:.45px !important;
+  white-space:nowrap !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated .cert-signature-blank{
+  display:block !important;
+  height:23px !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated .cert-signature-line{
+  display:block !important;
+  width:88% !important;
+  height:1px !important;
+  margin:0 auto 7px !important;
+  background:#d79b22 !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated strong{
+  display:block !important;
+  margin-top:0 !important;
+  color:#081944 !important;
+  font-size:14px !important;
+  line-height:1.12 !important;
+  white-space:nowrap !important;
+}
+
+.cert-footer.premium .cert-footer-item.associated small{
+  display:block !important;
+  margin-top:3px !important;
+  color:#132255 !important;
+  font-size:10.5px !important;
+  line-height:1.1 !important;
+  white-space:nowrap !important;
+}
+
+/* Keep the footer text above the decorative blue corner */
+.cert-footer.premium .cert-footer-item{
+  position:relative !important;
+  z-index:5 !important;
+}
+
 </style>
 </head>
 <body>
@@ -2816,7 +2878,7 @@ function generateIndependentCertificate(type){
   description.innerHTML=`has successfully completed the <span class="highlight-green">SelfTalk</span> <span class="highlight-blue">${normalizedLevel}</span> Speaking Challenge<br>by completing <span class="highlight-green">${TOTAL_COURSE_DAYS} consecutive days</span> of guided speaking practice,<br>demonstrating consistency, commitment, and oral communication skills in English.`;
 
   const associated=document.getElementById("certAssociatedBlock");
-  associated.style.display=isPremium?"flex":"none";
+  associated.style.display=isPremium?"block":"none";
 
   const footer=document.getElementById("certFooterGrid");
   footer.classList.toggle("premium",isPremium); footer.classList.toggle("free",!isPremium);
