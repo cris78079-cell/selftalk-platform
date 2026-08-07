@@ -3880,20 +3880,49 @@ function renderTeacherStudentClasses(){
 }
 
 function openTeacherClassStudents(classId){
-  activeStudentClassId=classId; activeTeacherStudentId=null;
-  const classes=getTeacherClasses(); const cls=classes.find(c=>String(c.id)===String(classId)); if(!cls) return;
-  document.getElementById("teacherStudentsClassesView").style.display="none";
-  document.getElementById("teacherStudentsListView").style.display="block";
-  document.getElementById("teacherStudentProfileView").style.display="none";
-  document.getElementById("selectedStudentClassName").textContent=cls.className;
-  document.getElementById("teacherStudentsListTitle").textContent=cls.className+" Students";
-  document.getElementById("teacherStudentsListMeta").textContent=`Code: ${cls.classCode} • Level: ${cls.level} • ${(cls.students||[]).length} enrolled`;
-  const list=document.getElementById("teacherStudentList"); list.innerHTML="";
+  // The button can be pressed from Dashboard / Classes. Make the Students
+  // section visible first; otherwise the list is rendered inside a hidden section.
+  showTeacherSection("students");
+
+  activeStudentClassId=String(classId);
+  activeTeacherStudentId=null;
+
+  const classes=getTeacherClasses();
+  const cls=classes.find(c=>String(c.id)===String(classId));
+  if(!cls){
+    alert("Class not found.");
+    return;
+  }
+
+  const classesView=document.getElementById("teacherStudentsClassesView");
+  const listView=document.getElementById("teacherStudentsListView");
+  const profileView=document.getElementById("teacherStudentProfileView");
+  if(classesView) classesView.style.display="none";
+  if(listView) listView.style.display="block";
+  if(profileView) profileView.style.display="none";
+
+  const selectedName=document.getElementById("selectedStudentClassName");
+  const title=document.getElementById("teacherStudentsListTitle");
+  const meta=document.getElementById("teacherStudentsListMeta");
+  if(selectedName) selectedName.textContent=cls.className;
+  if(title) title.textContent=cls.className+" Students";
+  if(meta) meta.textContent=`Code: ${cls.classCode} • Level: ${cls.level} • ${(cls.students||[]).length} enrolled`;
+
+  const list=document.getElementById("teacherStudentList");
+  if(!list) return;
+  list.innerHTML="";
+
   const students=cls.students||[];
-  if(!students.length){list.innerHTML=`<div class="empty-state">No students enrolled in this class yet.<div class="action-row" style="justify-content:center"><button class="btn secondary" onclick='addDemoStudentsToClass(${JSON.stringify(String(cls.id))})'>Add Demo Students for Presentation</button></div></div>`;return;}
+  if(!students.length){
+    list.innerHTML=`<div class="empty-state">No students enrolled in this class yet.<div class="action-row" style="justify-content:center"><button class="btn secondary" onclick='addDemoStudentsToClass(${JSON.stringify(String(cls.id))})'>Add Demo Students for Presentation</button></div></div>`;
+    return;
+  }
+
   students.forEach(st=>{
-    const completed=(st.recordings||[]).length; const total=cls.courseDays || (cls.activities||[]).length || 10;
-    const row=document.createElement("article"); row.className="teacher-student-row";
+    const completed=(st.recordings||[]).length;
+    const total=cls.courseDays || (cls.activities||[]).length || 10;
+    const row=document.createElement("article");
+    row.className="teacher-student-row";
     row.innerHTML=`<div class="teacher-student-main"><div class="teacher-student-avatar">${escapeActivityValue((st.name||"S").charAt(0).toUpperCase())}</div><div><strong>${escapeActivityValue(st.name)}</strong><span>${escapeActivityValue(st.email||"")} • ${escapeActivityValue(st.country||"")}</span><span>Progress: ${completed}/${total} days</span></div></div><button class="btn primary" onclick='openTeacherStudentProfile(${JSON.stringify(String(cls.id))},${JSON.stringify(String(st.id))})'>View Profile & Videos</button>`;
     list.appendChild(row);
   });
