@@ -1243,6 +1243,28 @@ footer{text-align:center;color:var(--muted);padding:28px 0 8px;font-size:13px}
 
 @media(max-width:1100px){.teacher-cert-settings-grid{grid-template-columns:1fr!important}.teacher-certificate-preview{min-width:760px}.certificate-settings-grid>div:last-child{overflow:auto}}
 
+
+/* Joined teacher-class certificate print */
+@media print{
+  body *{visibility:hidden!important}
+  #joinedClassCertArea,#joinedClassCertArea *{
+    visibility:visible!important;
+    -webkit-print-color-adjust:exact!important;
+    print-color-adjust:exact!important
+  }
+  #joinedClassCertArea{
+    position:fixed!important;
+    inset:0!important;
+    width:297mm!important;
+    height:210mm!important;
+    min-height:0!important;
+    margin:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    overflow:hidden!important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1861,6 +1883,112 @@ Support: SelfTalkPlatform@outlook.com
   </div>
 </div>
 
+
+
+<div class="modal-backdrop" id="joinedClassCertificateModal">
+  <div class="modal joined-class-cert-shell">
+    <div class="modal-head no-print">
+      <div>
+        <h2>Class Certificate</h2>
+        <p>This certificate uses the information configured by your teacher.</p>
+      </div>
+      <button class="close-btn" onclick="closeModal('joinedClassCertificateModal')">×</button>
+    </div>
+
+    <div class="teacher-certificate-preview joined-class-final-cert" id="joinedClassCertArea">
+      <div class="tcp-inner-border"></div>
+      <div class="tcp-corner tcp-corner-top"></div>
+      <div class="tcp-corner tcp-corner-bottom"></div>
+
+      <div class="tcp-header-branding">
+        <div class="tcp-institution-brand">
+          <div class="tcp-institution-logo" id="jccInstitutionLogo">
+            <div class="tcp-default-institution-icon">⌂</div>
+          </div>
+          <div class="tcp-institution-name" id="jccInstitutionName">Institution / Organization</div>
+        </div>
+
+        <div class="tcp-brand-separator"></div>
+
+        <div class="tcp-selftalk-brand">
+          <div class="tcp-selftalk-logo"><img id="jccSelfTalkLogo" alt="SelfTalk"></div>
+          <div class="tcp-selftalk-name">SelfTalk</div>
+        </div>
+      </div>
+
+      <div class="tcp-badge">
+        <div class="tcp-badge-stars">★★★★★</div>
+        <div>TEACHER<br>CLASS</div>
+      </div>
+
+      <div class="tcp-title">CERTIFICATE</div>
+      <div class="tcp-subtitle"><span></span>OF PARTICIPATION<span></span></div>
+      <div class="tcp-certify">This is to certify that</div>
+
+      <div class="tcp-student-name" id="jccStudentName">Student Name</div>
+
+      <div class="tcp-description">
+        has successfully completed the <strong class="tcp-blue" id="jccCourseName">Selected Class</strong><br>
+        under the guidance of <strong class="tcp-green" id="jccInstructorInline">Instructor Name</strong>,<br>
+        by completing <strong class="tcp-green" id="jccDaysInline">— consecutive days</strong> of guided speaking practice,<br>
+        demonstrating consistency, commitment and oral communication skills in English.
+      </div>
+
+      <div class="tcp-metrics">
+        <div class="tcp-metric">
+          <div class="tcp-metric-icon tcp-green-bg">🎓</div>
+          <span>COURSE</span>
+          <strong id="jccCourseMetric">Selected Class</strong>
+        </div>
+        <div class="tcp-metric">
+          <div class="tcp-metric-icon tcp-blue-bg">▣</div>
+          <span>COMPLETED</span>
+          <strong id="jccCompleted">— / — Days</strong>
+        </div>
+        <div class="tcp-metric">
+          <div class="tcp-metric-icon tcp-teal-bg">◷</div>
+          <span>ISSUED</span>
+          <strong id="jccIssued">—</strong>
+        </div>
+        <div class="tcp-metric">
+          <div class="tcp-metric-icon tcp-indigo-bg">♢</div>
+          <span>CERTIFICATE ID</span>
+          <strong id="jccId">ST-2026-000001</strong>
+        </div>
+      </div>
+
+      <div class="tcp-divider"></div>
+
+      <div class="tcp-signatures">
+        <div class="tcp-sign-block institution">
+          <span>INSTITUTION</span>
+          <div class="tcp-sign-line"></div>
+          <strong id="jccInstitutionFooter">Institution / Organization</strong>
+        </div>
+
+        <div class="tcp-sign-block instructor">
+          <span>INSTRUCTOR</span>
+          <div class="tcp-sign-line"></div>
+          <strong id="jccInstructor">Instructor Name</strong>
+          <small id="jccInstructorRole">English Teacher</small>
+        </div>
+
+        <div class="tcp-sign-block associated">
+          <span>ASSOCIATED WITH</span>
+          <div class="tcp-sign-line"></div>
+          <strong>Dr. Jardel Coutinho dos Santos</strong>
+          <small>Teacher Trainer</small>
+          <small>Code: MDT-5499-CCL-356917</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="action-row no-print">
+      <button class="btn green" onclick="printJoinedClassCertificate()">Save as PDF</button>
+      <button class="btn secondary" onclick="closeModal('joinedClassCertificateModal')">Close</button>
+    </div>
+  </div>
+</div>
 
 <div class="modal-backdrop" id="certificateChoiceModal">
   <div class="modal certificate-choice-modal">
@@ -2499,7 +2627,78 @@ function openCertificate(){
     alert("Please save your participant details first.");
     return;
   }
+
+  if(activeStudentClass && activeStudentClass.id){
+    generateJoinedClassCertificate();
+    return;
+  }
+
   openModal("certificateChoiceModal");
+}
+
+
+function createJoinedClassCertificateId(){
+  const year=new Date().getFullYear();
+  const classPart=String(activeStudentClass?.id||"CLASS").replace(/\D/g,"").slice(-4).padStart(4,"0");
+  const studentPart=String(selfTalkUser?.id||Date.now()).replace(/\D/g,"").slice(-5).padStart(5,"0");
+  return `ST-CLS-${year}-${classPart}${studentPart}`;
+}
+
+function generateJoinedClassCertificate(){
+  if(!activeStudentClass || !activeStudentClass.id){
+    alert("Class information is not available.");
+    return;
+  }
+
+  const profile=getProfile();
+  const institution=activeStudentClass.certificate_institution || activeStudentClass.institution_name || "Independent";
+  const instructor=activeStudentClass.certificate_instructor || "Instructor";
+  const instructorRole=activeStudentClass.certificate_instructor_role || "English Teacher";
+  const totalDays=Number(activeStudentClass.course_days || TOTAL_COURSE_DAYS || 10);
+  const courseName=activeStudentClass.class_name || "Speaking Course";
+
+  document.getElementById("jccStudentName").textContent=profile.name || selfTalkUser?.user_metadata?.full_name || "Student";
+  document.getElementById("jccCourseName").textContent=courseName;
+  document.getElementById("jccCourseMetric").textContent=courseName;
+  document.getElementById("jccInstructorInline").textContent=`Instructor ${instructor}`;
+  document.getElementById("jccDaysInline").textContent=`${totalDays} consecutive days`;
+  document.getElementById("jccCompleted").textContent=`${totalDays} / ${totalDays} Days`;
+  document.getElementById("jccIssued").textContent=formatCertificateIssuedDate();
+  document.getElementById("jccId").textContent=createJoinedClassCertificateId();
+  document.getElementById("jccInstitutionName").textContent=institution;
+  document.getElementById("jccInstitutionFooter").textContent=institution;
+  document.getElementById("jccInstructor").textContent=instructor;
+  document.getElementById("jccInstructorRole").textContent=instructorRole;
+
+  // Use the same SelfTalk logo currently embedded in the page.
+  const sourceLogo=document.querySelector(".tcp-selftalk-logo img, .home-nav .logo img, .logo img");
+  const targetLogo=document.getElementById("jccSelfTalkLogo");
+  if(sourceLogo && targetLogo) targetLogo.src=sourceLogo.src;
+
+  // Institution logo is currently stored locally by the teacher. If the student
+  // does not have that local image, a neutral institution mark is shown.
+  const logoHost=document.getElementById("jccInstitutionLogo");
+  const localTeacherClass=(typeof getTeacherClasses==="function")
+    ? getTeacherClasses().find(c=>String(c.id)===String(activeStudentClass.id))
+    : null;
+  const institutionLogo=localTeacherClass?.institutionLogoDataUrl || "";
+  if(logoHost){
+    logoHost.innerHTML=institutionLogo
+      ? `<img src="${institutionLogo}" alt="Institution logo">`
+      : '<div class="tcp-default-institution-icon">⌂</div>';
+  }
+
+  openModal("joinedClassCertificateModal");
+}
+
+function printJoinedClassCertificate(){
+  const area=document.getElementById("joinedClassCertArea");
+  if(!area) return;
+  area.classList.add("print-joined-class-cert");
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    window.print();
+    setTimeout(()=>area.classList.remove("print-joined-class-cert"),500);
+  }));
 }
 
 function generateIndependentCertificate(type){
@@ -2933,6 +3132,11 @@ function setTeacherClasses(classes){
 function mapSupabaseClass(row){
   const courseDays = Number(row.course_days || 10);
   const duration = Number(row.minimum_duration_seconds || row.minimum_duration || 120);
+  let localMatch=null;
+  try{
+    const saved=JSON.parse(localStorage.getItem(TEACHER_CLASSES_KEY)||"[]");
+    localMatch=(Array.isArray(saved)?saved:[]).find(c=>String(c.id)===String(row.id))||null;
+  }catch(e){}
   return {
     id: row.id,
     className: row.class_name,
@@ -2946,7 +3150,9 @@ function mapSupabaseClass(row){
     activities: [],
     createdAt: row.created_at || new Date().toISOString(),
     instructorName: row.certificate_instructor || "",
+    instructorRole: localMatch?.instructorRole || "English Teacher",
     institutionName: row.certificate_institution || row.institution_name || "",
+    institutionLogoDataUrl: localMatch?.institutionLogoDataUrl || "",
     cloudSynced: true
   };
 }
@@ -3367,7 +3573,7 @@ function updateTeacherCertificatePreview(cls){
   }
 }
 
-function saveTeacherCertificateInfo(){
+async function saveTeacherCertificateInfo(){
   const classId=document.getElementById("certificateClassSelect")?.value;
   const instructorName=document.getElementById("certificateInstructorName")?.value.trim()||"";
   const instructorRole=document.getElementById("certificateInstructorRole")?.value.trim()||"English Teacher";
@@ -3385,9 +3591,35 @@ function saveTeacherCertificateInfo(){
   cls.instructorRole=instructorRole;
   cls.institutionName=institutionName;
   setTeacherClasses(classes);
+
+  if(selfTalkUser){
+    const client=initSupabase();
+    if(!client) return;
+
+    const { error } = await client
+      .from("classes")
+      .update({
+        certificate_instructor: instructorName,
+        certificate_institution: institutionName,
+        institution_name: institutionName,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", classId)
+      .eq("teacher_id", selfTalkUser.id);
+
+    if(error){
+      console.error("Certificate information save error:", error);
+      alert("The certificate information was saved locally, but could not be synchronized with the class: "+error.message);
+      return;
+    }
+
+    cls.cloudSynced=true;
+    setTeacherClasses(classes);
+  }
+
   updateTeacherCertificatePreview(cls);
   renderTeacherDashboard();
-  alert("Certificate information saved for "+cls.className+".");
+  alert("Certificate information saved and linked to "+cls.className+".");
 }
 function openCertificateInfoForClass(classId){showTeacherSection("certificate");renderTeacherCertificateSettings(classId);window.scrollTo({top:0,behavior:"smooth"})}
 document.addEventListener("input",event=>{if(event.target&&["certificateInstructorName","certificateInstructorRole","certificateInstitutionName"].includes(event.target.id)){const classId=document.getElementById("certificateClassSelect")?.value;const cls=getTeacherClasses().find(c=>String(c.id)===String(classId));updateTeacherCertificatePreview(cls||null)}});
@@ -3864,6 +4096,12 @@ async function loadJoinedClassExperience(){
   }
 
   activeStudentClass = classRow;
+  try{
+    const locallyKnownClass=(typeof getTeacherClasses==="function")
+      ? getTeacherClasses().find(c=>String(c.id)===String(classRow.id))
+      : null;
+    if(locallyKnownClass?.instructorRole) activeStudentClass.certificate_instructor_role=locallyKnownClass.instructorRole;
+  }catch(e){}
   level = classRow.level || "Beginner";
   TOTAL_COURSE_DAYS = Number(classRow.course_days || (activityRows || []).length || 10);
   MIN_SECONDS = Number(classRow.minimum_duration_seconds || classRow.minimum_duration || getMinimumSecondsByLevel(level));
@@ -4063,4 +4301,3 @@ loadTeacherClassesFromSupabase = async function(){
 
 </body>
 </html>
-
