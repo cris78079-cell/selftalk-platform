@@ -1671,6 +1671,11 @@ function getMinimumSecondsByLevel(levelName){
 
 let MIN_SECONDS = getMinimumSecondsByLevel(level);
 let TOTAL_COURSE_DAYS = 10;
+
+const DEBUG = {
+  certificates: true
+};
+
 let activeStudentClass = null;
 let studentFeedbackCache = [];
 
@@ -1845,7 +1850,24 @@ function getProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"
 function getRecordings(){ return cloudRecordings; }
 function setRecordings(arr){ cloudRecordings = Array.isArray(arr) ? arr : []; }
 function getCompletedDays(){
- return [...new Set(getRecordings().filter(r => (r.status === "selected" || r.is_valid === true) && Number(r.duration||r.duration_seconds||0) >= MIN_SECONDS).map(r=>Number(r.day||r.day_number)))].sort((a,b)=>a-b)
+
+  if(DEBUG.certificates){
+    return Array.from(
+      { length: TOTAL_COURSE_DAYS },
+      (_, index) => index + 1
+    );
+  }
+
+  return [
+    ...new Set(
+      getRecordings()
+        .filter(recording =>
+          (recording.status === "selected" || recording.is_valid === true) &&
+          Number(recording.duration || recording.duration_seconds || 0) >= MIN_SECONDS
+        )
+        .map(recording => Number(recording.day || recording.day_number))
+    )
+  ].sort((a, b) => a - b);
 }
 async function loadCloudRecordings(){
  const client=initSupabase();
